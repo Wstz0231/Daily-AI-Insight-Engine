@@ -3,25 +3,11 @@ from pathlib import Path
 from typing import Any, Dict, List, Tuple, Optional
 from collections import Counter
 from datetime import datetime, date
-
-
-def load_json(path: Path) -> Any:
-    with path.open("r", encoding="utf-8") as f:
-        return json.load(f)
+from util import load_json, parse_yyyy_mm_dd, sentiment_label
 
 
 def load_structured(path: Path = Path("data/structured_data.json")) -> List[Dict[str, Any]]:
-    data = load_json(path)
-    return data
-
-
-def parse_yyyy_mm_dd(s: Optional[str]) -> Optional[date]:
-    if not s:
-        return None
-    try:
-        return datetime.strptime(s, "%Y-%m-%d").date()
-    except Exception:
-        return None
+    return load_json(path)
 
 
 def derive_report_date(records: List[Dict[str, Any]]) -> str:

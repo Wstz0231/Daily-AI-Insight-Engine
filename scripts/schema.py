@@ -1,8 +1,8 @@
 import json
 import re
-import os
 from pathlib import Path
 from typing import Any, List, Dict
+from util import get_openai_client, load_json, save_json
 
 
 def load_json(path: Path) -> Any:
@@ -16,30 +16,6 @@ def save_json(data: Any, path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
-
-
-def _read_env_simple() -> None:
-    """Minimal .env loader from project root; silent if missing."""
-    root = Path(__file__).resolve().parents[1]
-    env_path = root / ".env"
-    if not env_path.exists():
-        return
-    for line in env_path.read_text(encoding="utf-8").splitlines():
-        line = line.strip()
-        if not line or line.startswith('#') or '=' not in line:
-            continue
-        k, v = line.split('=', 1)
-        k = k.strip()
-        v = v.strip()
-        if k and k not in os.environ:
-            os.environ[k] = v
-
-
-def get_openai_client():
-    """Initialize OpenAI client after a simple .env load (no strict checks)."""
-    _read_env_simple()
-    from openai import OpenAI
-    return OpenAI()
 
 
 def safe_parse_json(text: str) -> Dict[str, Any]:

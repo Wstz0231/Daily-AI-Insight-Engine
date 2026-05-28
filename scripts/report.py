@@ -1,3 +1,10 @@
+import json
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
+from datetime import datetime, date
+from collections import Counter, defaultdict
+from util import load_json, parse_yyyy_mm_dd, sentiment_label, get_openai_client
+
 def impact_to_weight(level: Optional[int]) -> float:
     if level == 3:
         return 1.0
@@ -6,19 +13,6 @@ def impact_to_weight(level: Optional[int]) -> float:
     if level == 1:
         return 0.2
     return 0.4  # default mid
-
-import json
-import os
-from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
-from datetime import datetime, date
-from collections import Counter, defaultdict
-
-
-def load_json(path: Path) -> Any:
-    """Load JSON from a file path (UTF-8)."""
-    with path.open("r", encoding="utf-8") as f:
-        return json.load(f)
 
 
 def load_structured(path: Path = Path("data/structured_data.json")) -> List[Dict[str, Any]]:
@@ -35,15 +29,6 @@ if __name__ == "__main__":
 
 
 # --- Utilities: dates & scoring ---
-
-def parse_yyyy_mm_dd(s: Optional[str]) -> Optional[date]:
-    if not s:
-        return None
-    try:
-        return datetime.strptime(s, "%Y-%m-%d").date()
-    except Exception:
-        return None
-
 
 def compute_recency_map(records: List[Dict[str, Any]]) -> Dict[int, float]:
     """Normalize recency per record id to 0..1 based on min/max dates in dataset."""
@@ -277,26 +262,6 @@ def write_report(markdown_text: str, out_dir: Path = Path("output"), report_date
     path = out_dir / f"report_{date_str}.md"
     path.write_text(markdown_text, encoding="utf-8")
     return path
-
-
-def _read_env_simple() -> None:
-    root = Path(__file__).resolve().parents[1]
-    env_path = root / ".env"
-    if not env_path.exists():
-        return
-    for line in env_path.read_text(encoding="utf-8").splitlines():
-        line = line.strip()
-        if not line or line.startswith('#') or '=' not in line:
-            continue
-        k, v = line.split('=', 1)
-        if k and k not in os.environ:
-            os.environ[k.strip()] = v.strip()
-
-
-def get_openai_client():
-    _read_env_simple()
-    from openai import OpenAI
-    return OpenAI()
 
 
 def generate_trend_insight_lm(top_events: List[Dict[str, Any]], client) -> str:

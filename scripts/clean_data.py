@@ -1,9 +1,8 @@
 import re
-import json
 from typing import Optional
 from datetime import datetime
 from pathlib import Path
-import os
+from util import load_json, save_json, get_openai_client
 
 
 def clean_text(text: Optional[str]) -> str:
@@ -188,24 +187,9 @@ def assign_sequential_ids(records: list[dict]) -> list[dict]:
 
 # --- I/O and pipeline ---
 
-def load_raw_data(path: Path) -> list[dict]:
-	"""Load the raw news dataset from JSON."""
-	if not path.exists():
-		raise FileNotFoundError(f"Raw data file not found: {path}")
-	with path.open("r", encoding="utf-8") as f:
-		return json.load(f)
-
-
-def save_json(data: list[dict], path: Path) -> None:
-	"""Save list of dicts to JSON with UTF-8 and indentation."""
-	path.parent.mkdir(parents=True, exist_ok=True)
-	with path.open("w", encoding="utf-8") as f:
-		json.dump(data, f, ensure_ascii=False, indent=2)
-
-
 def run_pipeline(input_path: Path, output_path: Path, client) -> None:
 	"""Load raw -> clean records -> assign ids -> save cleaned JSON."""
-	records = load_raw_data(input_path)
+	records = load_json(input_path)
 	cleaned = []
 	for item in records:
 		rec = clean_record(item, client)
@@ -216,31 +200,6 @@ def run_pipeline(input_path: Path, output_path: Path, client) -> None:
 
 
 # ---  CLI ---
-
-def _read_env_simple() -> None:
-	"""Minimal .env loader from project root; silent if missing."""
-	root = Path(__file__).resolve().parents[1]
-	env_path = root / ".env"
-	if not env_path.exists():
-		return
-	for line in env_path.read_text(encoding="utf-8").splitlines():
-		line = line.strip()
-		if not line or line.startswith('#') or '=' not in line:
-			continue
-		k, v = line.split('=', 1)
-		k = k.strip()
-		v = v.strip()
-		if k:
-			# Do not alter existing env if already set
-			if k not in os.environ:
-				os.environ[k] = v
-
-
-def get_openai_client():
-	"""Initialize OpenAI client after a simple .env load (no checks)."""
-	_read_env_simple()
-	from openai import OpenAI
-	return OpenAI()
 
 
 if __name__ == "__main__":
