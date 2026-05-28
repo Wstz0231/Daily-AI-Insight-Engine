@@ -5,7 +5,8 @@
 利用Claude Code等AI工具完成AI舆情分析日报。给定爬虫或手动整理舆情资料，对资料进行结构化整理并且形成可视化报告。
 
 ## 2.项目目录结构
-│
+```text
+Daily-AI-Insight-Engine/
 ├── data/
 │   ├── raw_data.json
 │   ├── cleaned_data.json
@@ -15,22 +16,20 @@
 │   ├── report_YYYY-MM-DD.md
 │   └── figures/
 │       ├── topics_YYYY-MM-DD.png
-│       ├── sentiment_YYYY-MM-DD.png
-│       └── categories_YYYY-MM-DD.png
+│       └── sentiment_YYYY-MM-DD.png
 │
 ├── scripts/
 │   ├── clean_data.py
 │   ├── schema.py
 │   ├── report.py
 │   ├── visualization.py
-│   └── util.py
+│   ├── util.py
 │   └── main.py
 │
-├── .env
 ├── .gitignore
 ├── requirements.txt
 └── README.md
-
+```
 
 ## 3.数据源说明
 本项目使用 AI 行业相关新闻作为原始数据，主要采集网站为机器之心。相比其他综合平台，机器之心文章资源更加聚焦人工智能，以文章的形式提供AI方面最新舆情，数据噪音更低，但是爬取难度稍高，同时没有点击量以及点赞量等数据。当前 MVP 阶段主要采用人工整理后的静态 JSON 数据。
