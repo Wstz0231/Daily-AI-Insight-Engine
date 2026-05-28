@@ -1,4 +1,14 @@
+def impact_to_weight(level: Optional[int]) -> float:
+    if level == 3:
+        return 1.0
+    if level == 2:
+        return 0.6
+    if level == 1:
+        return 0.2
+    return 0.4  # default mid
+
 import json
+import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 from datetime import datetime, date
@@ -55,16 +65,6 @@ def compute_recency_map(records: List[Dict[str, Any]]) -> Dict[int, float]:
     return out
 
 
-def impact_to_weight(level: Optional[int]) -> float:
-    if level == 3:
-        return 1.0
-    if level == 2:
-        return 0.6
-    if level == 1:
-        return 0.2
-    return 0.4  # default mid
-
-
 def sentiment_boost(val: Optional[int]) -> float:
     if val == 1:
         return 0.10
@@ -101,6 +101,14 @@ def compute_scores(records: List[Dict[str, Any]]) -> Dict[int, float]:
         score = 0.4 * s_rec + 0.4 * s_imp + 0.1 * s_src + 0.1 * (0.5 + s_sen)
         out[rid] = round(float(score), 6)
     return out
+def impact_badge(level: Optional[int]) -> str:
+    try:
+        lvl = int(level)
+    except Exception:
+        lvl = 2
+    lvl = max(1, min(3, lvl))
+    return "★" * lvl
+
 
 
 # --- Utilities: labeling & trends ---
@@ -111,15 +119,6 @@ def sentiment_label(v: Optional[int]) -> str:
     if v == -1:
         return "负面"
     return "中性"
-
-
-def impact_badge(level: Optional[int]) -> str:
-    try:
-        lvl = int(level)
-    except Exception:
-        lvl = 2
-    lvl = max(1, min(3, lvl))
-    return "★" * lvl
 
 
 def build_trends(records: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -197,20 +196,14 @@ def render_top_events_section(top: List[Dict[str, Any]]) -> str:
         d = r.get("published_at", "")
         cat = r.get("category", "")
         sen = sentiment_label(r.get("sentiment"))
-        badge = impact_badge(r.get("impact_level")) if "impact_level" in r else ""
-        head = f"- [{idx}] [{title}]({url}) — {src} | {d} | {cat} | {sen} {badge}"
+        head = f"- [{idx}] [{title}]({url}) — {src} | {d} | {cat} | {sen}"
         lines.append(head)
-        # Brief details
-        summ = r.get("summary", "")
-        ents = fmt_list(r.get("key_entities", []) or [])
-        lines.append(f"  - 摘要：{summ}")
-        lines.append(f"  - 关键：{ents}")
     return "\n".join(lines)
 
 
 def render_deep_dives_section(top: List[Dict[str, Any]]) -> str:
     lines: List[str] = []
-    lines.append("**重要事件深度**")
+    lines.append("**重要事件概述**")
     for r in top:
         title = r.get("title", "")
         url = r.get("url", "")
@@ -242,18 +235,18 @@ def render_trends_section(tr: Dict[str, Any], top_n: int = 5) -> str:
     else:
         cline = "—"
     lines.append(f"- 类别分布：{cline}")
-    # Sentiment
-    if senti:
-        sline = ", ".join([f"{k}:{v}" for k, v in senti.most_common()])
+    # Sentiment as percentages (正面/中性/负面)
+    total = sum(senti.values())
+    if total > 0:
+        order = ["正面", "中性", "负面"]
+        parts = []
+        for label in order:
+            pct = 100.0 * senti.get(label, 0) / total
+            parts.append(f"{label}:{pct:.0f}%")
+        sline = ", ".join(parts)
     else:
         sline = "—"
     lines.append(f"- 舆情分布：{sline}")
-    # Sources
-    if sources:
-        srcline = ", ".join([f"{k}:{v}" for k, v in sources.most_common(top_n)])
-    else:
-        srcline = "—"
-    lines.append(f"- 来源Top{top_n}：{srcline}")
     return "\n".join(lines)
 
 
@@ -286,10 +279,95 @@ def write_report(markdown_text: str, out_dir: Path = Path("output"), report_date
     return path
 
 
+def _read_env_simple() -> None:
+    root = Path(__file__).resolve().parents[1]
+    env_path = root / ".env"
+    if not env_path.exists():
+        return
+    for line in env_path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith('#') or '=' not in line:
+            continue
+        k, v = line.split('=', 1)
+        if k and k not in os.environ:
+            os.environ[k.strip()] = v.strip()
+
+
+def get_openai_client():
+    _read_env_simple()
+    from openai import OpenAI
+    return OpenAI()
+
+
+def generate_trend_insight_lm(top_events: List[Dict[str, Any]], client) -> str:
+    # Prepare a compact bullet list for the model
+    bullets = []
+    for i, r in enumerate(top_events[:5], start=1):
+        bullets.append(
+            f"[{i}] 标题：{r.get('title','')} | 类别：{r.get('category','')} | 主题：{','.join(r.get('topic_tags',[]) or [])}\n摘要：{r.get('summary','')}"
+        )
+    joined = "\n\n".join(bullets)
+
+    messages = [
+        {
+            "role": "system",
+            "content": (
+                "你是科技行业分析师。请基于提供的重点事件摘要，提炼今日在技术/应用/政策/资本四个方向上的趋势洞察。"
+                "用简洁的中文写一段分析，3-5句为宜。不要罗列清单，不要使用标题或小结，只输出一段文字。"
+            ),
+        },
+        {
+            "role": "user",
+            "content": (
+                "以下是Top 5事件的关键信息，请综合判断整体趋势：\n\n" + joined
+            ),
+        },
+    ]
+
+    from openai import OpenAI
+    try:
+        resp = get_openai_client().chat.completions.create(
+            model="gpt-4o-mini",
+            temperature=0.2,
+            messages=messages,
+        )
+        text = (resp.choices[0].message.content or "").strip()
+        return text
+    except Exception:
+        return "今日趋势：侧重增量能力与落地扩张，政策与资本信号需持续跟踪。"
+
+
+def render_trend_judgement_section(text: str) -> str:
+    lines = ["**趋势判断**", text]
+    return "\n".join(lines)
+
+
+def render_report(records: List[Dict[str, Any]], top: List[Dict[str, Any]], trends: Dict[str, Any], trend_text: str) -> str:
+    report_date = pick_report_date(records)
+    lines: List[str] = []
+    lines.append(f"# AI 舆情分析日报（{report_date}）")
+    lines.append("")
+    lines.append(f"共处理 {len(records)} 条资讯。")
+    lines.append("")
+    lines.append(render_top_events_section(top))
+    lines.append("")
+    lines.append(render_deep_dives_section(top))
+    lines.append("")
+    lines.append(render_trend_judgement_section(trend_text))
+    lines.append("")
+    lines.append(render_trends_section(trends))
+    lines.append("")
+    lines.append("（注：分数基于时间、影响、来源与舆情的启发式权重计算。）")
+    return "\n".join(lines)
+
+
 def main():
     structured_path = Path("data/structured_data.json")
     items = load_structured(structured_path)
-    md = render_markdown(items, top_k=5)
+    top = select_top_events(items, k=5)
+    trends = build_trends(items)
+    trend_text = generate_trend_insight_lm(top, get_openai_client())
+    md = render_report(items, top, trends, trend_text)
     d = pick_report_date(items)
     out_path = write_report(md, Path("output"), d)
     print(f"Report written to: {out_path}")

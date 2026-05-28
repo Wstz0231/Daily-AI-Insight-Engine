@@ -69,7 +69,7 @@ TOPIC_SET: List[str] = [
 ]
 
 
-# Stubs for model-powered computations (to be implemented next)
+# Stubs for model-powered computations
 def compute_category_and_topics_lm(title: str, summary: str, client) -> Dict[str, Any]:
     """Use the LLM to assign a single category and 0-6 topic tags from fixed sets."""
     title = title or ""
@@ -317,6 +317,7 @@ def transform_record(rec: Dict[str, Any], client) -> Dict[str, Any]:
         "summary": summary,
         "key_entities": ents.get("key_entities", []),
         "impact": impact.get("impact", "影响待评估。"),
+        "impact_level": impact.get("impact_level", 2),
         "sentiment": senti.get("sentiment", 0),
         "topic_tags": cat_topics.get("topic_tags", []),
     }

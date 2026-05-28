@@ -91,15 +91,28 @@ def openai_generate_title_cn(text: str, client, model: str = "gpt-4o-mini") -> s
 
 
 def openai_summarize_cn(text: str, client, model: str = "gpt-4o-mini", max_sentences: int = 3) -> str:
-	"""Summarize input into 1-3 Chinese sentences."""
+	"""Summarize input into 1-3 Chinese sentences focusing on 背景+影响分析."""
 	if not text:
 		return ""
 	resp = client.chat.completions.create(
 		model=model,
 		temperature=0.2,
 		messages=[
-			{"role": "system", "content": "你是中文写作助手。只输出1-3句中文摘要文本。"},
-			{"role": "user", "content": f"用中文总结为1-{max_sentences}句，只输出正文：\n{text}"},
+			{
+				"role": "system",
+				"content": (
+					"你是一名中文新闻编辑。请围绕‘关键事件的背景+影响分析’撰写摘要。"
+					"仅输出摘要正文，不要任何标签、标题或多余说明。"
+				),
+			},
+			{
+				"role": "user",
+				"content": (
+					f"请用中文写一段1-{max_sentences}句的摘要，按‘背景+影响/意义/后续’展开，"
+					"优先保留事实、机构与数值信息，避免营销语与主观夸张。只输出正文：\n"
+					f"{text}"
+				),
+			},
 		],
 	)
 	out = resp.choices[0].message.content or ""
@@ -109,8 +122,8 @@ def openai_summarize_cn(text: str, client, model: str = "gpt-4o-mini", max_sente
 # --- Field cleaners ---
 
 def clean_summary(item: dict, client) -> str:
-	"""Summarize content_or_summary or summary to 1-3 Chinese sentences."""
-	src = item.get("content_or_summary") or item.get("summary") or ""
+	"""Summarize content or summary to 1-3 Chinese sentences."""
+	src = item.get("content") or item.get("summary") or ""
 	src = clean_text(src)
 	if not src:
 		return ""
@@ -127,7 +140,7 @@ def clean_title(item: dict, client) -> Optional[str]:
 		title = clean_text(title)[:20]
 		return title if title else None
 	# No title; try to generate from available text
-	base = clean_text(item.get("content_or_summary", "") or item.get("summary", ""))
+	base = clean_text(item.get("content", "") or item.get("summary", ""))
 	if not base:
 		return None
 	gen = openai_generate_title_cn(base, client)
@@ -136,11 +149,11 @@ def clean_title(item: dict, client) -> Optional[str]:
 
 
 def should_discard(item: dict) -> bool:
-	"""Discard if no title and no usable text (summary or content_or_summary) to derive a title."""
+	"""Discard if no title and no usable text (summary or content) to derive a title."""
 	title = clean_text(item.get("title", ""))
 	if title:
 		return False
-	src = clean_text(item.get("summary", "") or item.get("content_or_summary", ""))
+	src = clean_text(item.get("summary", "") or item.get("content", ""))
 	return not bool(src)
 
 
@@ -155,12 +168,14 @@ def clean_record(item: dict, client) -> Optional[dict]:
 	published_at = clean_published_at(item.get("published_at"))
 	url = item.get("url", "")  # keep as-is (trim not required by spec)
 	source = item.get("source", "")  # keep as-is
+	content = item.get("content", "")  # keep original text as-is
 	return {
 		"title": title,
 		"summary": summary,
 		"published_at": published_at,
 		"url": url,
 		"source": source,
+		"content": content,
 	}
 
 
