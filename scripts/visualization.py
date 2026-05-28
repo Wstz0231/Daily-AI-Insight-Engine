@@ -96,7 +96,7 @@ def generate_sentiment_chart(records: List[Dict[str, Any]], out_dir: Path = Path
     return plot_pie(items, title, path, figsize=(6, 6))
 
 
-def main():
+def run():
     structured_path = Path("data/structured_data.json")
     records = load_structured(structured_path)
     out_dir = Path("output/figures")
@@ -116,4 +116,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    run()

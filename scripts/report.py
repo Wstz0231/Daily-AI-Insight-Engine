@@ -16,12 +16,10 @@ def impact_to_weight(level: Optional[int]) -> float:
 
 
 def load_structured(path: Path = Path("data/structured_data.json")) -> List[Dict[str, Any]]:
-    """Load the structured dataset produced by schema.py."""
     data = load_json(path)
     return data
 
 def compute_recency_map(records: List[Dict[str, Any]]) -> Dict[int, float]:
-    """Normalize recency per record id to 0..1 based on min/max dates in dataset."""
     dated: List[Tuple[int, date]] = []
     for r in records:
         d = parse_yyyy_mm_dd(r.get("published_at"))
@@ -49,7 +47,7 @@ def sentiment_boost(val: Optional[int]) -> float:
 
 
 def compute_scores(records: List[Dict[str, Any]]) -> Dict[int, float]:
-    """Compute a score per record id combining recency, impact, and sentiment (no source weight)."""
+    """加权计算分数"""
     recency = compute_recency_map(records)
     out: Dict[int, float] = {}
     for r in records:
@@ -59,7 +57,6 @@ def compute_scores(records: List[Dict[str, Any]]) -> Dict[int, float]:
         s_rec = recency.get(rid, 0.5)
         s_imp = impact_to_weight(r.get("impact_level"))
         s_sen = sentiment_boost(r.get("sentiment"))
-        # Weights: recency 0.3, impact 0.4, sentiment 0.3
         score = 0.3 * s_rec + 0.4 * s_imp + 0.3 * s_sen
         out[rid] = round(float(score), 6)
     return out
@@ -131,7 +128,8 @@ def fmt_list(values: List[str], limit: int = 3) -> str:
 
 def render_top_events_section(top: List[Dict[str, Any]]) -> str:
     lines: List[str] = []
-    lines.append("** 今日热点Top5 **")
+    lines.append("## 今日热点 Top 5")
+    lines.append("")
     for idx, r in enumerate(top, start=1):
         title = r.get("title", "")
         url = r.get("url", "")
@@ -145,11 +143,13 @@ def render_top_events_section(top: List[Dict[str, Any]]) -> str:
 
 def render_deep_dives_section(top: List[Dict[str, Any]]) -> str:
     lines: List[str] = []
-    lines.append("**重要事件概述**")
+    lines.append("## 重要事件概述")
+    lines.append("")
     for r in top:
         title = r.get("title", "")
         url = r.get("url", "")
-        lines.append(f"- {title} ({url})")
+        lines.append(f"### {title}")
+        lines.append("")
         lines.append(f"  - 背景/概述：{r.get('summary','')}")
         lines.append(f"  - 影响（{impact_badge(r.get('impact_level'))}）：{r.get('impact','影响待评估。')}")
         lines.append(f"  - 相关方：{fmt_list(r.get('key_entities', []) or [])}")
@@ -159,7 +159,8 @@ def render_deep_dives_section(top: List[Dict[str, Any]]) -> str:
 
 def render_trends_section(tr: Dict[str, Any], top_n: int = 5) -> str:
     lines: List[str] = []
-    lines.append("**趋势与分布**")
+    lines.append("## 趋势与分布")
+    lines.append("")
     topics: Counter = tr["topics"]
     senti: Counter = tr["sentiment"]
     sources: Counter = tr["sources"]
@@ -192,15 +193,12 @@ def render_markdown(records: List[Dict[str, Any]], top_k: int = 5) -> str:
     lines: List[str] = []
     lines.append(f"# AI 舆情分析日报（{report_date}）")
     lines.append("")
-    lines.append(f"共处理 {len(records)} 条资讯。")
-    lines.append("")
     lines.append(render_top_events_section(top))
     lines.append("")
     lines.append(render_deep_dives_section(top))
     lines.append("")
     lines.append(render_trends_section(trends))
     lines.append("")
-    lines.append("（注：分数基于时间、影响、来源与舆情的启发式权重计算。）")
     return "\n".join(lines)
 
 
@@ -250,7 +248,7 @@ def generate_trend_insight_lm(top_events: List[Dict[str, Any]], client) -> str:
 
 
 def render_trend_judgement_section(text: str) -> str:
-    lines = ["**趋势判断**", text]
+    lines = ["## 趋势判断", "", text, ""]
     return "\n".join(lines)
 
 
@@ -258,8 +256,6 @@ def render_report(records: List[Dict[str, Any]], top: List[Dict[str, Any]], tren
     report_date = pick_report_date(records)
     lines: List[str] = []
     lines.append(f"# AI 舆情分析日报（{report_date}）")
-    lines.append("")
-    lines.append(f"共处理 {len(records)} 条资讯。")
     lines.append("")
     lines.append(render_top_events_section(top))
     lines.append("")
@@ -271,7 +267,7 @@ def render_report(records: List[Dict[str, Any]], top: List[Dict[str, Any]], tren
     return "\n".join(lines)
 
 
-def main():
+def run():
     structured_path = Path("data/structured_data.json")
     items = load_structured(structured_path)
     top = select_top_events(items, k=5)
@@ -284,5 +280,5 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    run()
 
