@@ -1,0 +1,237 @@
+import re
+import json
+from typing import Optional
+from datetime import datetime
+from pathlib import Path
+import os
+
+
+def clean_text(text: Optional[str]) -> str:
+	"""Trim text and collapse whitespace/newlines into single spaces."""
+	if not text:
+		return ""
+	cleaned = str(text).strip()
+	cleaned = re.sub(r"\s+", " ", cleaned)
+	return cleaned
+
+
+def has_cjk(text: Optional[str]) -> bool:
+	"""Return True if any CJK character is present (simple heuristic)."""
+	if not text:
+		return False
+	return re.search(r"[\u4e00-\u9fff]", str(text)) is not None
+
+
+def parse_date(date_str: str) -> str:
+	"""Parse common date formats and return YYYY-MM-DD, else empty string."""
+	if not date_str:
+		return ""
+	s = date_str.strip()
+	# Fast path: already YYYY-MM-DD
+	if re.fullmatch(r"\d{4}-\d{2}-\d{2}", s):
+		return s
+	patterns = [
+		"%Y/%m/%d",
+		"%Y-%m-%d %H:%M",
+		"%Y-%m-%d %H:%M:%S",
+		"%b %d, %Y",   # May 29, 2026
+		"%B %d, %Y",   # May 29, 2026 (full month)
+		"%d %b %Y",    # 29 May 2026
+		"%d %B %Y",    # 29 May 2026 (full month)
+	]
+	for p in patterns:
+		try:
+			dt = datetime.strptime(s, p)
+			return dt.date().isoformat()
+		except Exception:
+			continue
+	return ""
+
+
+def clean_published_at(date_str: Optional[str]) -> str:
+	"""Basic wrapper: trim and normalize to YYYY-MM-DD or empty string."""
+	if not date_str:
+		return ""
+	s = clean_text(date_str)
+	return parse_date(s)
+
+
+
+def openai_translate_to_cn(text: str, client, model: str = "gpt-4o-mini") -> str:
+	"""Translate arbitrary text to Chinese using OpenAI Chat Completions."""
+	if not text:
+		return ""
+	resp = client.chat.completions.create(
+		model=model,
+		temperature=0.2,
+		messages=[
+			{"role": "system", "content": "你是一个中文翻译助手。只输出中文翻译结果。"},
+			{"role": "user", "content": f"用中文翻译下面内容，只输出中文结果：\n{text}"},
+		],
+	)
+	out = resp.choices[0].message.content or ""
+	return out.strip()
+
+
+def openai_generate_title_cn(text: str, client, model: str = "gpt-4o-mini") -> str:
+	"""Generate a concise Chinese news title (≤20 chars)."""
+	if not text:
+		return ""
+	resp = client.chat.completions.create(
+		model=model,
+		temperature=0.2,
+		messages=[
+			{"role": "system", "content": "你是新闻编辑。只输出中文标题，不加引号或多余说明。"},
+			{"role": "user", "content": f"基于以下内容生成中文新闻标题，不超过20个汉字，只输出标题：\n{text}"},
+		],
+	)
+	out = (resp.choices[0].message.content or "").strip()
+	# Hard cut to 20 chars to keep it brief
+	return out[:20]
+
+
+def openai_summarize_cn(text: str, client, model: str = "gpt-4o-mini", max_sentences: int = 3) -> str:
+	"""Summarize input into 1-3 Chinese sentences."""
+	if not text:
+		return ""
+	resp = client.chat.completions.create(
+		model=model,
+		temperature=0.2,
+		messages=[
+			{"role": "system", "content": "你是中文写作助手。只输出1-3句中文摘要文本。"},
+			{"role": "user", "content": f"用中文总结为1-{max_sentences}句，只输出正文：\n{text}"},
+		],
+	)
+	out = resp.choices[0].message.content or ""
+	return out.strip()
+
+
+# --- Field cleaners ---
+
+def clean_summary(item: dict, client) -> str:
+	"""Summarize content_or_summary or summary to 1-3 Chinese sentences."""
+	src = item.get("content_or_summary") or item.get("summary") or ""
+	src = clean_text(src)
+	if not src:
+		return ""
+	out = openai_summarize_cn(src, client)
+	return clean_text(out)
+
+
+def clean_title(item: dict, client) -> Optional[str]:
+	"""Produce a Chinese title (≤20 chars). Translate if needed or generate from summary/content."""
+	title = clean_text(item.get("title", ""))
+	if title:
+		if not has_cjk(title):
+			title = openai_translate_to_cn(title, client)
+		title = clean_text(title)[:20]
+		return title if title else None
+	# No title; try to generate from available text
+	base = clean_text(item.get("content_or_summary", "") or item.get("summary", ""))
+	if not base:
+		return None
+	gen = openai_generate_title_cn(base, client)
+	gen = clean_text(gen)[:20]
+	return gen if gen else None
+
+
+def should_discard(item: dict) -> bool:
+	"""Discard if no title and no usable text (summary or content_or_summary) to derive a title."""
+	title = clean_text(item.get("title", ""))
+	if title:
+		return False
+	src = clean_text(item.get("summary", "") or item.get("content_or_summary", ""))
+	return not bool(src)
+
+
+def clean_record(item: dict, client) -> Optional[dict]:
+	"""Clean a single record. Returns cleaned dict or None if discarded."""
+	if should_discard(item):
+		return None
+	title = clean_title(item, client)
+	if not title:
+		return None
+	summary = clean_summary(item, client)
+	published_at = clean_published_at(item.get("published_at"))
+	url = item.get("url", "")  # keep as-is (trim not required by spec)
+	source = item.get("source", "")  # keep as-is
+	return {
+		"title": title,
+		"summary": summary,
+		"published_at": published_at,
+		"url": url,
+		"source": source,
+	}
+
+
+def assign_sequential_ids(records: list[dict]) -> list[dict]:
+	"""Assign id = 1..N in order and return the list."""
+	for i, rec in enumerate(records, start=1):
+		rec["id"] = i
+	return records
+
+
+# --- I/O and pipeline ---
+
+def load_raw_data(path: Path) -> list[dict]:
+	"""Load the raw news dataset from JSON."""
+	if not path.exists():
+		raise FileNotFoundError(f"Raw data file not found: {path}")
+	with path.open("r", encoding="utf-8") as f:
+		return json.load(f)
+
+
+def save_json(data: list[dict], path: Path) -> None:
+	"""Save list of dicts to JSON with UTF-8 and indentation."""
+	path.parent.mkdir(parents=True, exist_ok=True)
+	with path.open("w", encoding="utf-8") as f:
+		json.dump(data, f, ensure_ascii=False, indent=2)
+
+
+def run_pipeline(input_path: Path, output_path: Path, client) -> None:
+	"""Load raw -> clean records -> assign ids -> save cleaned JSON."""
+	records = load_raw_data(input_path)
+	cleaned = []
+	for item in records:
+		rec = clean_record(item, client)
+		if rec is not None:
+			cleaned.append(rec)
+	assign_sequential_ids(cleaned)
+	save_json(cleaned, output_path)
+
+
+# ---  CLI ---
+
+def _read_env_simple() -> None:
+	"""Minimal .env loader from project root; silent if missing."""
+	root = Path(__file__).resolve().parents[1]
+	env_path = root / ".env"
+	if not env_path.exists():
+		return
+	for line in env_path.read_text(encoding="utf-8").splitlines():
+		line = line.strip()
+		if not line or line.startswith('#') or '=' not in line:
+			continue
+		k, v = line.split('=', 1)
+		k = k.strip()
+		v = v.strip()
+		if k:
+			# Do not alter existing env if already set
+			if k not in os.environ:
+				os.environ[k] = v
+
+
+def get_openai_client():
+	"""Initialize OpenAI client after a simple .env load (no checks)."""
+	_read_env_simple()
+	from openai import OpenAI
+	return OpenAI()
+
+
+if __name__ == "__main__":
+	client = get_openai_client()
+	in_path = Path("data/raw_data.json")
+	out_path = Path("data/cleaned_data.json")
+	run_pipeline(in_path, out_path, client)
+	print(f"Cleaned data written to: {out_path}")
+

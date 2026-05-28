@@ -1,0 +1,301 @@
+import json
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
+from datetime import datetime, date
+from collections import Counter, defaultdict
+
+
+def load_json(path: Path) -> Any:
+    """Load JSON from a file path (UTF-8)."""
+    with path.open("r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def load_structured(path: Path = Path("data/structured_data.json")) -> List[Dict[str, Any]]:
+    """Load the structured dataset produced by schema.py."""
+    data = load_json(path)
+    # Expecting a list of records
+    return data
+
+
+if __name__ == "__main__":
+    structured_path = Path("data/structured_data.json")
+    items = load_structured(structured_path)
+    print(f"Loaded {len(items)} structured records from: {structured_path}")
+
+
+# --- Utilities: dates & scoring ---
+
+def parse_yyyy_mm_dd(s: Optional[str]) -> Optional[date]:
+    if not s:
+        return None
+    try:
+        return datetime.strptime(s, "%Y-%m-%d").date()
+    except Exception:
+        return None
+
+
+def compute_recency_map(records: List[Dict[str, Any]]) -> Dict[int, float]:
+    """Normalize recency per record id to 0..1 based on min/max dates in dataset."""
+    dated: List[Tuple[int, date]] = []
+    for r in records:
+        d = parse_yyyy_mm_dd(r.get("published_at"))
+        if d is not None:
+            rid = r.get("id")
+            if isinstance(rid, int):
+                dated.append((rid, d))
+    if not dated:
+        return {}
+    all_dates = [d for _, d in dated]
+    d_min, d_max = min(all_dates), max(all_dates)
+    span = max(1, (d_max - d_min).days)
+    out: Dict[int, float] = {}
+    for rid, d in dated:
+        out[rid] = 1.0 - ((d_max - d).days / span)
+    return out
+
+
+def impact_to_weight(level: Optional[int]) -> float:
+    if level == 3:
+        return 1.0
+    if level == 2:
+        return 0.6
+    if level == 1:
+        return 0.2
+    return 0.4  # default mid
+
+
+def sentiment_boost(val: Optional[int]) -> float:
+    if val == 1:
+        return 0.10
+    if val == -1:
+        return -0.05
+    return 0.0
+
+
+def source_weight(name: Optional[str]) -> float:
+    if not name:
+        return 0.6
+    name_l = str(name).lower()
+    high = ["reuters", "bloomberg", "openai blog", "techcrunch", "the verge", "arxiv", "meta newsroom"]
+    mid = ["量子位", "机器之心", "百度ai", "微软官网", "hacker news"]
+    if any(k in name_l for k in high):
+        return 1.0
+    if any(k in name for k in mid):
+        return 0.8
+    return 0.6
+
+
+def compute_scores(records: List[Dict[str, Any]]) -> Dict[int, float]:
+    """Compute a score per record id combining recency, impact, sentiment, and source weight."""
+    recency = compute_recency_map(records)
+    out: Dict[int, float] = {}
+    for r in records:
+        rid = r.get("id")
+        if not isinstance(rid, int):
+            continue
+        s_rec = recency.get(rid, 0.5)
+        s_imp = impact_to_weight(r.get("impact_level"))
+        s_src = source_weight(r.get("source"))
+        s_sen = sentiment_boost(r.get("sentiment"))
+        score = 0.4 * s_rec + 0.4 * s_imp + 0.1 * s_src + 0.1 * (0.5 + s_sen)
+        out[rid] = round(float(score), 6)
+    return out
+
+
+# --- Utilities: labeling & trends ---
+
+def sentiment_label(v: Optional[int]) -> str:
+    if v == 1:
+        return "正面"
+    if v == -1:
+        return "负面"
+    return "中性"
+
+
+def impact_badge(level: Optional[int]) -> str:
+    try:
+        lvl = int(level)
+    except Exception:
+        lvl = 2
+    lvl = max(1, min(3, lvl))
+    return "★" * lvl
+
+
+def build_trends(records: List[Dict[str, Any]]) -> Dict[str, Any]:
+    topics = Counter()
+    cats = Counter()
+    senti = Counter()
+    sources = Counter()
+    for r in records:
+        for t in r.get("topic_tags", []) or []:
+            if isinstance(t, str) and t:
+                topics[t] += 1
+        cat = r.get("category")
+        if isinstance(cat, str) and cat:
+            cats[cat] += 1
+        sv = r.get("sentiment")
+        senti[sentiment_label(sv)] += 1
+        src = r.get("source")
+        if isinstance(src, str) and src:
+            sources[src] += 1
+    return {
+        "topics": topics,
+        "categories": cats,
+        "sentiment": senti,
+        "sources": sources,
+    }
+
+
+# --- Selection ---
+
+def select_top_events(records: List[Dict[str, Any]], k: int = 5) -> List[Dict[str, Any]]:
+    """Return top-k records by score; tie-break by newer published_at, then id."""
+    if not records:
+        return []
+    scores = compute_scores(records)
+
+    def sort_key(r: Dict[str, Any]):
+        rid = r.get("id") if isinstance(r.get("id"), int) else -1
+        sc = scores.get(rid, 0.0)
+        d = parse_yyyy_mm_dd(r.get("published_at")) or date.min
+        # Use ordinal for cross-platform ordering (no %s on Windows)
+        ord_val = d.toordinal()
+        # Sort by: score desc, date desc (ordinal), id asc
+        return (-sc, -ord_val, rid)
+
+    sorted_items = sorted(records, key=sort_key)
+    return sorted_items[: max(0, k)]
+
+
+# --- Markdown rendering ---
+
+def pick_report_date(records: List[Dict[str, Any]]) -> str:
+    dates = [parse_yyyy_mm_dd(r.get("published_at")) for r in records]
+    dates = [d for d in dates if d is not None]
+    if dates:
+        return max(dates).isoformat()
+    return date.today().isoformat()
+
+
+def fmt_list(values: List[str], limit: int = 3) -> str:
+    vals = [v for v in values if isinstance(v, str) and v]
+    if not vals:
+        return "—"
+    if len(vals) > limit:
+        vals = vals[:limit]
+    return "、".join(vals)
+
+
+def render_top_events_section(top: List[Dict[str, Any]]) -> str:
+    lines: List[str] = []
+    lines.append("**今日热点（Top 3-5）**")
+    for idx, r in enumerate(top, start=1):
+        title = r.get("title", "")
+        url = r.get("url", "")
+        src = r.get("source", "")
+        d = r.get("published_at", "")
+        cat = r.get("category", "")
+        sen = sentiment_label(r.get("sentiment"))
+        badge = impact_badge(r.get("impact_level")) if "impact_level" in r else ""
+        head = f"- [{idx}] [{title}]({url}) — {src} | {d} | {cat} | {sen} {badge}"
+        lines.append(head)
+        # Brief details
+        summ = r.get("summary", "")
+        ents = fmt_list(r.get("key_entities", []) or [])
+        lines.append(f"  - 摘要：{summ}")
+        lines.append(f"  - 关键：{ents}")
+    return "\n".join(lines)
+
+
+def render_deep_dives_section(top: List[Dict[str, Any]]) -> str:
+    lines: List[str] = []
+    lines.append("**重要事件深度**")
+    for r in top:
+        title = r.get("title", "")
+        url = r.get("url", "")
+        lines.append(f"- {title} ({url})")
+        lines.append(f"  - 背景/概述：{r.get('summary','')}")
+        lines.append(f"  - 影响（{impact_badge(r.get('impact_level'))}）：{r.get('impact','影响待评估。')}")
+        lines.append(f"  - 相关方：{fmt_list(r.get('key_entities', []) or [])}")
+        lines.append(f"  - 主题：{fmt_list(r.get('topic_tags', []) or [])}")
+    return "\n".join(lines)
+
+
+def render_trends_section(tr: Dict[str, Any], top_n: int = 5) -> str:
+    lines: List[str] = []
+    lines.append("**趋势与分布**")
+    topics: Counter = tr["topics"]
+    cats: Counter = tr["categories"]
+    senti: Counter = tr["sentiment"]
+    sources: Counter = tr["sources"]
+    # Topics top-N
+    top_topics = topics.most_common(top_n)
+    if top_topics:
+        tline = ", ".join([f"{k}:{v}" for k, v in top_topics])
+    else:
+        tline = "—"
+    lines.append(f"- 主题Top{top_n}：{tline}")
+    # Categories
+    if cats:
+        cline = ", ".join([f"{k}:{v}" for k, v in cats.most_common()])
+    else:
+        cline = "—"
+    lines.append(f"- 类别分布：{cline}")
+    # Sentiment
+    if senti:
+        sline = ", ".join([f"{k}:{v}" for k, v in senti.most_common()])
+    else:
+        sline = "—"
+    lines.append(f"- 舆情分布：{sline}")
+    # Sources
+    if sources:
+        srcline = ", ".join([f"{k}:{v}" for k, v in sources.most_common(top_n)])
+    else:
+        srcline = "—"
+    lines.append(f"- 来源Top{top_n}：{srcline}")
+    return "\n".join(lines)
+
+
+def render_markdown(records: List[Dict[str, Any]], top_k: int = 5) -> str:
+    report_date = pick_report_date(records)
+    scores = compute_scores(records)
+    top = select_top_events(records, k=top_k)
+    trends = build_trends(records)
+
+    lines: List[str] = []
+    lines.append(f"# AI 舆情分析日报（{report_date}）")
+    lines.append("")
+    lines.append(f"共处理 {len(records)} 条资讯。")
+    lines.append("")
+    lines.append(render_top_events_section(top))
+    lines.append("")
+    lines.append(render_deep_dives_section(top))
+    lines.append("")
+    lines.append(render_trends_section(trends))
+    lines.append("")
+    lines.append("（注：分数基于时间、影响、来源与舆情的启发式权重计算。）")
+    return "\n".join(lines)
+
+
+def write_report(markdown_text: str, out_dir: Path = Path("output"), report_date: Optional[str] = None) -> Path:
+    out_dir.mkdir(parents=True, exist_ok=True)
+    date_str = report_date or date.today().isoformat()
+    path = out_dir / f"report_{date_str}.md"
+    path.write_text(markdown_text, encoding="utf-8")
+    return path
+
+
+def main():
+    structured_path = Path("data/structured_data.json")
+    items = load_structured(structured_path)
+    md = render_markdown(items, top_k=5)
+    d = pick_report_date(items)
+    out_path = write_report(md, Path("output"), d)
+    print(f"Report written to: {out_path}")
+
+
+if __name__ == "__main__":
+    # Keep the earlier info print, then generate the report
+    main()
+
