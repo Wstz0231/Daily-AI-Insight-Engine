@@ -5,20 +5,8 @@ from typing import Any, List, Dict
 from util import get_openai_client, load_json, save_json
 
 
-def load_json(path: Path) -> Any:
-    """Load JSON from a file path (UTF-8)."""
-    with path.open("r", encoding="utf-8") as f:
-        return json.load(f)
-
-
-def save_json(data: Any, path: Path) -> None:
-    """Save JSON to a file path (UTF-8, pretty). Creates parent dirs if needed."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
-
-
 def safe_parse_json(text: str) -> Dict[str, Any]:
+    """JSON处理"""
     try:
         return json.loads(text)
     except Exception:
@@ -26,7 +14,7 @@ def safe_parse_json(text: str) -> Dict[str, Any]:
 
 
 def json_call(messages: List[Dict[str, str]], client, model: str = "gpt-4o-mini", temperature: float = 0.2) -> Dict[str, Any]:
-    """Call Chat Completions expecting JSON object in the message content."""
+    """语言模型JSON包装器"""
     resp = client.chat.completions.create(
         model=model,
         temperature=temperature,
@@ -37,21 +25,43 @@ def json_call(messages: List[Dict[str, str]], client, model: str = "gpt-4o-mini"
     return safe_parse_json(content)
 
 
-# Constants for schema extraction
-CATEGORIES: List[str] = ["技术", "产品", "政策", "资本", "产业"]
+# 类别
 TOPIC_SET: List[str] = [
-    "大模型/LLM", "多模态", "开源", "芯片/算力", "云服务", "办公助手/生产力",
-    "合规/政策", "医疗", "语音/对话", "搜索", "机器人", "边缘/端侧",
+    "大模型",
+    "多模态",
+    "自然语言处理",
+    "语音",
+    "对话机器人",
+    "计算机视觉",
+    "生成式图像/视频",
+    "生成式音频",
+    "Agent",
+    "RAG",
+    "提示工程",
+    "安全/对齐",
+    "数据管理",
+    "开源项目",
+    "模型压缩/蒸馏",
+    "推理优化/加速",
+    "芯片",
+    "云平台",
+    "边缘/端侧AI",
+    "机器人/机械臂",
+    "自动驾驶",
+    "医疗AI",
+    "金融AI",
+    "教育AI",
+    "工业AI",
+    "办公/生产力",
+    "搜索/推荐",
+    "合规/政策",
 ]
 
-
-# Stubs for model-powered computations
 def compute_category_and_topics_lm(title: str, summary: str, client) -> Dict[str, Any]:
-    """Use the LLM to assign a single category and 0-6 topic tags from fixed sets."""
+    """标注一个类别，若无则生成"""
     title = title or ""
     summary = summary or ""
 
-    allowed_categories = ", ".join(f'"{c}"' for c in CATEGORIES)
     topics_list = ", ".join(f'"{t}"' for t in TOPIC_SET)
 
     messages = [
@@ -64,13 +74,10 @@ def compute_category_and_topics_lm(title: str, summary: str, client) -> Dict[str
         {
             "role": "user",
             "content": (
-                "根据标题和摘要，完成两件事：\n"
-                "1) 在以下分类中选择且仅选择一个：[" + allowed_categories + "]。\n"
-                "2) 在以下主题集中选择0-6个最相关标签（可少于3个）：[" + topics_list + "]。\n"
-                "请仅返回JSON：{\n"
-                "  \"category\": <string>,\n"
-                "  \"topic_tags\": <array of strings>,\n"
-                "  \"confidence\": <number 0..1>\n"
+                "根据标题和摘要，从以下主题集中选择且仅选择1个最相关标签：[" + topics_list + "]。\n"
+                "若没有任何合适主题，请自行生成1个简洁中文主题标签（风格与给定主题一致，2-10字）。\n"
+                "仅返回JSON：{\n"
+                "  \"topic_tags\": [<string: exactly one>]\n"
                 "}\n\n"
                 f"标题：{title}\n"
                 f"摘要：{summary}"
@@ -80,46 +87,25 @@ def compute_category_and_topics_lm(title: str, summary: str, client) -> Dict[str
 
     res = json_call(messages, client)
 
-    # Extract and validate category
-    cat = res.get("category") if isinstance(res, dict) else None
-    if not isinstance(cat, str) or cat not in CATEGORIES:
-        # Small normalization for common variants
-        norm = (cat or "").strip()
-        mapping = {
-            "政策法规": "政策",
-            "产业链": "产业",
-            "行业": "产业",
-            "产品发布": "产品",
-            "技术研究": "技术",
-            "资本市场": "资本",
-        }
-        cat = mapping.get(norm, "技术")
-
-    # Extract and validate topics
     topics = res.get("topic_tags") if isinstance(res, dict) else []
-    if not isinstance(topics, list):
-        topics = []
-    # Keep only known topics, preserve order, limit to 6
-    seen = set()
-    filtered: List[str] = []
-    for t in topics:
-        if isinstance(t, str) and t in TOPIC_SET and t not in seen:
-            filtered.append(t)
-            seen.add(t)
-        if len(filtered) >= 6:
-            break
+    topic: str = ""
+    if isinstance(topics, list) and topics:
+        cand = topics[0]
+        if isinstance(cand, str):
+            topic = cand.strip()
+    elif isinstance(topics, str):
+        topic = topics.strip()
 
-    conf = res.get("confidence") if isinstance(res, dict) else 0.0
-    try:
-        conf = float(conf)
-    except Exception:
-        conf = 0.0
+    if not topic:
+        topic = "大模型"
 
-    return {"category": cat, "topic_tags": filtered, "confidence": conf}
+    filtered: List[str] = [topic]
+
+    return {"topic_tags": filtered}
 
 
 def extract_key_entities_lm(title: str, summary: str, client) -> Dict[str, Any]:
-    """Use the LLM to extract 3-5 key entities (companies/products/models/persons)."""
+    """3-5个实体提取"""
     title = title or ""
     summary = summary or ""
 
@@ -135,7 +121,7 @@ def extract_key_entities_lm(title: str, summary: str, client) -> Dict[str, Any]:
             "content": (
                 "从标题和摘要中提取3-5个关键实体（公司/机构/产品/模型/人物），"
                 "使用常见中文或官方英文简称，不要附加描述或标点。\n"
-                "仅返回JSON：{\n  \"key_entities\": [string,...],\n  \"confidence\": 0..1\n}\n\n"
+                "仅返回JSON：{\n  \"key_entities\": [string,...]\n}\n\n"
                 f"标题：{title}\n"
                 f"摘要：{summary}"
             ),
@@ -146,7 +132,6 @@ def extract_key_entities_lm(title: str, summary: str, client) -> Dict[str, Any]:
     ents = res.get("key_entities") if isinstance(res, dict) else []
     if not isinstance(ents, list):
         ents = []
-    # Clean, dedupe, and cap to 5
     seen = set()
     out_ents: List[str] = []
     for e in ents:
@@ -160,17 +145,11 @@ def extract_key_entities_lm(title: str, summary: str, client) -> Dict[str, Any]:
         if len(out_ents) >= 5:
             break
 
-    conf = res.get("confidence") if isinstance(res, dict) else 0.0
-    try:
-        conf = float(conf)
-    except Exception:
-        conf = 0.0
-
-    return {"key_entities": out_ents, "confidence": conf}
+    return {"key_entities": out_ents}
 
 
 def compute_impact_lm(title: str, summary: str, client) -> Dict[str, Any]:
-    """Use the LLM to generate a 1–2 sentence Chinese impact statement and a 1–3 level."""
+    """生成新闻影响和影响力分数"""
     title = title or ""
     summary = summary or ""
 
@@ -183,8 +162,8 @@ def compute_impact_lm(title: str, summary: str, client) -> Dict[str, Any]:
             "role": "user",
             "content": (
                 "基于标题和摘要，用1-2句中文概述该事件对行业/企业/用户的影响，"
-                "并给出影响强度1(弱)/2(中)/3(强)与置信度(0..1)。\n"
-                "仅返回JSON：{\\n  \\\"impact\\\": string,\\n  \\\"impact_level\\\": 1|2|3,\\n  \\\"confidence\\\": 0..1\\n}\\n\\n"
+                "并给出从1到3的影响强度。影响强度为1代表对市场有局部影响，影响强度为3代表对市场有强烈影响。\n"
+                "仅返回JSON：{\\n  \\\"impact\\\": string,\\n  \\\"impact_level\\\": 1|2|3\\n}\\n\\n"
                 f"标题：{title}\n"
                 f"摘要：{summary}"
             ),
@@ -197,7 +176,7 @@ def compute_impact_lm(title: str, summary: str, client) -> Dict[str, Any]:
         impact_txt = "影响待评估。"
     impact_txt = impact_txt.strip()
 
-    # Limit to 1-2 sentences (rough split on common punctuation)
+    # 限制长度
     parts = [p for p in re.split(r"[。！？.!?]", impact_txt) if p.strip()]
     if len(parts) > 2:
         impact_txt = "。".join(parts[:2]) + "。"
@@ -212,21 +191,11 @@ def compute_impact_lm(title: str, summary: str, client) -> Dict[str, Any]:
     if level > 3:
         level = 3
 
-    conf = res.get("confidence") if isinstance(res, dict) else 0.0
-    try:
-        conf = float(conf)
-    except Exception:
-        conf = 0.0
-    if conf < 0:
-        conf = 0.0
-    if conf > 1:
-        conf = 1.0
-
-    return {"impact": impact_txt, "impact_level": level, "confidence": conf}
+    return {"impact": impact_txt, "impact_level": level}
 
 
 def compute_sentiment_lm(title: str, summary: str, client) -> Dict[str, Any]:
-    """Use the LLM to assign sentiment: -1 (negative), 0 (neutral), 1 (positive)."""
+    """生成情感分数1为正面，0为中性，-1为负面"""
     title = title or ""
     summary = summary or ""
 
@@ -239,7 +208,7 @@ def compute_sentiment_lm(title: str, summary: str, client) -> Dict[str, Any]:
             "role": "user",
             "content": (
                 "判断该新闻的舆情倾向：-1=负面, 0=中性, 1=正面，并给出置信度(0..1)。\n"
-                "仅返回JSON：{\\n  \\\"sentiment\\\": -1|0|1,\\n  \\\"confidence\\\": 0..1\\n}\\n\\n"
+                "仅返回JSON：{\\n  \\\"sentiment\\\": -1|0|1\\n}\\n\\n"
                 f"标题：{title}\n"
                 f"摘要：{summary}"
             ),
@@ -260,21 +229,11 @@ def compute_sentiment_lm(title: str, summary: str, client) -> Dict[str, Any]:
     if val > 1:
         val = 1
 
-    conf = res.get("confidence") if isinstance(res, dict) else 0.0
-    try:
-        conf = float(conf)
-    except Exception:
-        conf = 0.0
-    if conf < 0:
-        conf = 0.0
-    if conf > 1:
-        conf = 1.0
-
-    return {"sentiment": val, "confidence": conf}
+    return {"sentiment": val}
 
 
 def transform_record(rec: Dict[str, Any], client) -> Dict[str, Any]:
-    """Compose the target schema for a single cleaned record."""
+    """合并成为条目"""
     title = rec.get("title", "")
     summary = rec.get("summary", "")
 
@@ -289,7 +248,6 @@ def transform_record(rec: Dict[str, Any], client) -> Dict[str, Any]:
         "source": rec.get("source", ""),
         "url": rec.get("url", ""),
         "published_at": rec.get("published_at", ""),
-        "category": cat_topics.get("category", "技术"),
         "summary": summary,
         "key_entities": ents.get("key_entities", []),
         "impact": impact.get("impact", "影响待评估。"),
@@ -306,7 +264,6 @@ def run(input_path: Path = Path("data/cleaned_data.json"), output_path: Path = P
     structured: List[Dict[str, Any]] = []
     for rec in items:
         structured.append(transform_record(rec, client))
-    # Assign sequential ids for any missing ones
     for i, r in enumerate(structured, start=1):
         if r.get("id") in (None, ""):
             r["id"] = i

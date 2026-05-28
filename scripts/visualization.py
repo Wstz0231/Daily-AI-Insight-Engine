@@ -1,8 +1,7 @@
-import json
 from pathlib import Path
 from typing import Any, Dict, List, Tuple, Optional
 from collections import Counter
-from datetime import datetime, date
+from datetime import date
 from util import load_json, parse_yyyy_mm_dd, sentiment_label
 
 
@@ -27,23 +26,6 @@ def count_topics(records: List[Dict[str, Any]], top_n: int = 10) -> List[Tuple[s
     return c.most_common(top_n)
 
 
-def count_categories(records: List[Dict[str, Any]]) -> List[Tuple[str, int]]:
-    c = Counter()
-    for r in records:
-        cat = r.get("category")
-        if isinstance(cat, str) and cat:
-            c[cat] += 1
-    return c.most_common()
-
-
-def sentiment_label(v: Optional[int]) -> str:
-    if v == 1:
-        return "正面"
-    if v == -1:
-        return "负面"
-    return "中性"
-
-
 def count_sentiment(records: List[Dict[str, Any]]) -> List[Tuple[str, int]]:
     c = Counter()
     for r in records:
@@ -61,26 +43,32 @@ def ensure_chinese_font():
         pass
 
 
-def plot_barh(items: List[Tuple[str, int]], title: str, xlabel: str, out_path: Path, figsize=(8, 5)) -> Optional[Path]:
+def plot_pie(items: List[Tuple[str, int]], title: str, out_path: Path, figsize=(7, 7)) -> Optional[Path]:
     if not items:
         return None
     import matplotlib.pyplot as plt
 
-    labels = [k for k, _ in items][::-1]  # reverse for horizontal bar from top to bottom
-    values = [v for _, v in items][::-1]
+    labels = [k for k, _ in items]
+    values = [v for _, v in items]
+
+    total = sum(values)
+    def _autopct(pct):
+        count = int(round(pct / 100.0 * total))
+        return f"{pct:.1f}%\n({count})"
 
     ensure_chinese_font()
     plt.figure(figsize=figsize)
-    bars = plt.barh(range(len(labels)), values, color="#4C78A8")
-    plt.yticks(range(len(labels)), labels)
-    plt.xlabel(xlabel)
+    wedges, texts, autotexts = plt.pie(
+        values,
+        labels=labels,
+        autopct=_autopct,
+        startangle=140,
+        counterclock=False,
+        wedgeprops={"linewidth": 1, "edgecolor": "white"},
+        textprops={"fontsize": 10},
+    )
     plt.title(title)
-
-    # annotate counts
-    for i, b in enumerate(bars):
-        w = b.get_width()
-        plt.text(w + max(values) * 0.01, b.get_y() + b.get_height()/2, str(values[i]), va='center')
-
+    plt.axis('equal')  # Equal aspect ratio ensures pie is drawn as a circle.
     plt.tight_layout()
     out_path.parent.mkdir(parents=True, exist_ok=True)
     plt.savefig(out_path, dpi=150)
@@ -93,19 +81,9 @@ def generate_topic_chart(records: List[Dict[str, Any]], out_dir: Path = Path("ou
     if not items:
         return None
     d = derive_report_date(records)
-    title = f"主题分布（Top 10）– {d}"
+    title = f"主题分布– {d}"
     path = out_dir / f"topics_{d}.png"
-    return plot_barh(items, title, "条目数", path, figsize=(9, 6))
-
-
-def generate_category_chart(records: List[Dict[str, Any]], out_dir: Path = Path("output/figures")) -> Optional[Path]:
-    items = count_categories(records)
-    if not items:
-        return None
-    d = derive_report_date(records)
-    title = f"类别分布 – {d}"
-    path = out_dir / f"categories_{d}.png"
-    return plot_barh(items, title, "条目数", path, figsize=(7, 5))
+    return plot_pie(items, title, path, figsize=(7, 7))
 
 
 def generate_sentiment_chart(records: List[Dict[str, Any]], out_dir: Path = Path("output/figures")) -> Optional[Path]:
@@ -115,7 +93,7 @@ def generate_sentiment_chart(records: List[Dict[str, Any]], out_dir: Path = Path
     d = derive_report_date(records)
     title = f"舆情分布 – {d}"
     path = out_dir / f"sentiment_{d}.png"
-    return plot_barh(items, title, "条目数", path, figsize=(6, 4))
+    return plot_pie(items, title, path, figsize=(6, 6))
 
 
 def main():
@@ -124,10 +102,6 @@ def main():
     out_dir = Path("output/figures")
     out_paths = []
     p = generate_topic_chart(records, out_dir)
-    if p:
-        out_paths.append(p)
-    # Optional extras
-    p = generate_category_chart(records, out_dir)
     if p:
         out_paths.append(p)
     p = generate_sentiment_chart(records, out_dir)

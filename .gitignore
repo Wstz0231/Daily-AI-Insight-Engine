@@ -1,4 +1,4 @@
 .env
 AI应用笔试题.md
-/output/figures
 /data
+/scripts/__pycache__

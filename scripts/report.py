@@ -12,23 +12,13 @@ def impact_to_weight(level: Optional[int]) -> float:
         return 0.6
     if level == 1:
         return 0.2
-    return 0.4  # default mid
+    return 0.4
 
 
 def load_structured(path: Path = Path("data/structured_data.json")) -> List[Dict[str, Any]]:
     """Load the structured dataset produced by schema.py."""
     data = load_json(path)
-    # Expecting a list of records
     return data
-
-
-if __name__ == "__main__":
-    structured_path = Path("data/structured_data.json")
-    items = load_structured(structured_path)
-    print(f"Loaded {len(items)} structured records from: {structured_path}")
-
-
-# --- Utilities: dates & scoring ---
 
 def compute_recency_map(records: List[Dict[str, Any]]) -> Dict[int, float]:
     """Normalize recency per record id to 0..1 based on min/max dates in dataset."""
@@ -52,27 +42,14 @@ def compute_recency_map(records: List[Dict[str, Any]]) -> Dict[int, float]:
 
 def sentiment_boost(val: Optional[int]) -> float:
     if val == 1:
-        return 0.10
+        return 1.0
     if val == -1:
-        return -0.05
+        return 1.0
     return 0.0
 
 
-def source_weight(name: Optional[str]) -> float:
-    if not name:
-        return 0.6
-    name_l = str(name).lower()
-    high = ["reuters", "bloomberg", "openai blog", "techcrunch", "the verge", "arxiv", "meta newsroom"]
-    mid = ["量子位", "机器之心", "百度ai", "微软官网", "hacker news"]
-    if any(k in name_l for k in high):
-        return 1.0
-    if any(k in name for k in mid):
-        return 0.8
-    return 0.6
-
-
 def compute_scores(records: List[Dict[str, Any]]) -> Dict[int, float]:
-    """Compute a score per record id combining recency, impact, sentiment, and source weight."""
+    """Compute a score per record id combining recency, impact, and sentiment (no source weight)."""
     recency = compute_recency_map(records)
     out: Dict[int, float] = {}
     for r in records:
@@ -81,11 +58,13 @@ def compute_scores(records: List[Dict[str, Any]]) -> Dict[int, float]:
             continue
         s_rec = recency.get(rid, 0.5)
         s_imp = impact_to_weight(r.get("impact_level"))
-        s_src = source_weight(r.get("source"))
         s_sen = sentiment_boost(r.get("sentiment"))
-        score = 0.4 * s_rec + 0.4 * s_imp + 0.1 * s_src + 0.1 * (0.5 + s_sen)
+        # Weights: recency 0.3, impact 0.4, sentiment 0.3
+        score = 0.3 * s_rec + 0.4 * s_imp + 0.3 * s_sen
         out[rid] = round(float(score), 6)
     return out
+
+# 影响力可视化
 def impact_badge(level: Optional[int]) -> str:
     try:
         lvl = int(level)
@@ -95,29 +74,15 @@ def impact_badge(level: Optional[int]) -> str:
     return "★" * lvl
 
 
-
-# --- Utilities: labeling & trends ---
-
-def sentiment_label(v: Optional[int]) -> str:
-    if v == 1:
-        return "正面"
-    if v == -1:
-        return "负面"
-    return "中性"
-
-
+# 趋势列表
 def build_trends(records: List[Dict[str, Any]]) -> Dict[str, Any]:
     topics = Counter()
-    cats = Counter()
     senti = Counter()
     sources = Counter()
     for r in records:
         for t in r.get("topic_tags", []) or []:
             if isinstance(t, str) and t:
                 topics[t] += 1
-        cat = r.get("category")
-        if isinstance(cat, str) and cat:
-            cats[cat] += 1
         sv = r.get("sentiment")
         senti[sentiment_label(sv)] += 1
         src = r.get("source")
@@ -125,13 +90,10 @@ def build_trends(records: List[Dict[str, Any]]) -> Dict[str, Any]:
             sources[src] += 1
     return {
         "topics": topics,
-        "categories": cats,
         "sentiment": senti,
         "sources": sources,
     }
 
-
-# --- Selection ---
 
 def select_top_events(records: List[Dict[str, Any]], k: int = 5) -> List[Dict[str, Any]]:
     """Return top-k records by score; tie-break by newer published_at, then id."""
@@ -143,16 +105,12 @@ def select_top_events(records: List[Dict[str, Any]], k: int = 5) -> List[Dict[st
         rid = r.get("id") if isinstance(r.get("id"), int) else -1
         sc = scores.get(rid, 0.0)
         d = parse_yyyy_mm_dd(r.get("published_at")) or date.min
-        # Use ordinal for cross-platform ordering (no %s on Windows)
         ord_val = d.toordinal()
-        # Sort by: score desc, date desc (ordinal), id asc
         return (-sc, -ord_val, rid)
 
     sorted_items = sorted(records, key=sort_key)
     return sorted_items[: max(0, k)]
 
-
-# --- Markdown rendering ---
 
 def pick_report_date(records: List[Dict[str, Any]]) -> str:
     dates = [parse_yyyy_mm_dd(r.get("published_at")) for r in records]
@@ -173,15 +131,14 @@ def fmt_list(values: List[str], limit: int = 3) -> str:
 
 def render_top_events_section(top: List[Dict[str, Any]]) -> str:
     lines: List[str] = []
-    lines.append("**今日热点（Top 3-5）**")
+    lines.append("** 今日热点Top5 **")
     for idx, r in enumerate(top, start=1):
         title = r.get("title", "")
         url = r.get("url", "")
         src = r.get("source", "")
         d = r.get("published_at", "")
-        cat = r.get("category", "")
         sen = sentiment_label(r.get("sentiment"))
-        head = f"- [{idx}] [{title}]({url}) — {src} | {d} | {cat} | {sen}"
+        head = f"- [{idx}] [{title}]({url}) — {src} | {d} | {sen}"
         lines.append(head)
     return "\n".join(lines)
 
@@ -204,23 +161,14 @@ def render_trends_section(tr: Dict[str, Any], top_n: int = 5) -> str:
     lines: List[str] = []
     lines.append("**趋势与分布**")
     topics: Counter = tr["topics"]
-    cats: Counter = tr["categories"]
     senti: Counter = tr["sentiment"]
     sources: Counter = tr["sources"]
-    # Topics top-N
     top_topics = topics.most_common(top_n)
     if top_topics:
         tline = ", ".join([f"{k}:{v}" for k, v in top_topics])
     else:
         tline = "—"
     lines.append(f"- 主题Top{top_n}：{tline}")
-    # Categories
-    if cats:
-        cline = ", ".join([f"{k}:{v}" for k, v in cats.most_common()])
-    else:
-        cline = "—"
-    lines.append(f"- 类别分布：{cline}")
-    # Sentiment as percentages (正面/中性/负面)
     total = sum(senti.values())
     if total > 0:
         order = ["正面", "中性", "负面"]
@@ -265,11 +213,10 @@ def write_report(markdown_text: str, out_dir: Path = Path("output"), report_date
 
 
 def generate_trend_insight_lm(top_events: List[Dict[str, Any]], client) -> str:
-    # Prepare a compact bullet list for the model
     bullets = []
     for i, r in enumerate(top_events[:5], start=1):
         bullets.append(
-            f"[{i}] 标题：{r.get('title','')} | 类别：{r.get('category','')} | 主题：{','.join(r.get('topic_tags',[]) or [])}\n摘要：{r.get('summary','')}"
+            f"[{i}] 标题：{r.get('title','')} | 主题：{','.join(r.get('topic_tags',[]) or [])}\n摘要：{r.get('summary','')}"
         )
     joined = "\n\n".join(bullets)
 
@@ -299,7 +246,7 @@ def generate_trend_insight_lm(top_events: List[Dict[str, Any]], client) -> str:
         text = (resp.choices[0].message.content or "").strip()
         return text
     except Exception:
-        return "今日趋势：侧重增量能力与落地扩张，政策与资本信号需持续跟踪。"
+        return "今日趋势：无"
 
 
 def render_trend_judgement_section(text: str) -> str:
@@ -321,8 +268,6 @@ def render_report(records: List[Dict[str, Any]], top: List[Dict[str, Any]], tren
     lines.append(render_trend_judgement_section(trend_text))
     lines.append("")
     lines.append(render_trends_section(trends))
-    lines.append("")
-    lines.append("（注：分数基于时间、影响、来源与舆情的启发式权重计算。）")
     return "\n".join(lines)
 
 
@@ -339,6 +284,5 @@ def main():
 
 
 if __name__ == "__main__":
-    # Keep the earlier info print, then generate the report
     main()
 
