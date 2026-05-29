@@ -11,10 +11,10 @@
       "DeepSeek-V4-Pro",
       "深圳河套学院",
       "国产算力集群",
-      "AI"
+      "AI人才"
     ],
-    "impact": "该事件标志着国产AI基础设施的重大进展，将提升行业的技术水平和人才培养，推动国产AI技术的发展。",
-    "impact_level": 3,
+    "impact": "该事件标志着国产AI基础设施的重大进展，可能提升国内AI技术的竞争力和自主研发能力，对行业产生积极影响。",
+    "impact_level": 4,
     "sentiment": 1,
     "topic_tags": [
       "大模型"
@@ -32,8 +32,8 @@
       "Google",
       "AI"
     ],
-    "impact": "谷歌AI在基本语言任务中的局限性可能削弱用户对其搜索引擎的信任，影响其市场地位。",
-    "impact_level": 2,
+    "impact": "此次事件可能削弱用户对谷歌搜索的信任，迫使公司加快技术优化，影响其在信息检索领域的竞争力。",
+    "impact_level": 4,
     "sentiment": -1,
     "topic_tags": [
       "自然语言处理"
@@ -53,11 +53,11 @@
       "国产超算",
       "遥感数据"
     ],
-    "impact": "这一突破将显著提升遥感数据的存储和处理效率，对相关行业的技术进步和成本降低产生积极影响。",
-    "impact_level": 3,
+    "impact": "这一突破性技术将显著提升遥感数据的存储和处理效率，对相关行业产生深远影响。",
+    "impact_level": 4,
     "sentiment": 1,
     "topic_tags": [
-      "模型压缩/蒸馏"
+      "生成式音频"
     ]
   },
   {
@@ -74,8 +74,8 @@
       "多模态技术",
       "物理世界技术"
     ],
-    "impact": "此次会议和AI Talent Meetup将促进AI领域的技术交流与人才合作，推动行业发展。",
-    "impact_level": 2,
+    "impact": "此次CVPR会议的召开及AI Talent Meetup的举办将促进AI领域的技术交流与人才聚集，推动行业的进一步发展。",
+    "impact_level": 4,
     "sentiment": 1,
     "topic_tags": [
       "多模态"
@@ -94,8 +94,8 @@
       "MIT",
       "ThoughtTrace"
     ],
-    "impact": "Google的新数据集将显著提升对话型AI系统的理解能力，推动人机交互的进步，对行业产生深远影响。",
-    "impact_level": 3,
+    "impact": "该数据集的发布将显著提升对话型AI系统的理解和预测能力，推动人机交互领域的发展，可能影响多个相关行业的AI应用。",
+    "impact_level": 4,
     "sentiment": 1,
     "topic_tags": [
       "对话机器人"
@@ -115,8 +115,8 @@
       "具身智能",
       "开源"
     ],
-    "impact": "国产预训练具身大模型的开源将推动行业技术进步和竞争，降低了技术门槛，促进了更多企业和用户的参与。",
-    "impact_level": 3,
+    "impact": "国产预训练具身大模型的开源将推动具身智能领域的技术进步和竞争，可能改变行业格局。",
+    "impact_level": 4,
     "sentiment": 1,
     "topic_tags": [
       "大模型"
@@ -136,8 +136,8 @@
       "蒙特利尔大学",
       "Google"
     ],
-    "impact": "UNSL的提出可能会推动深度学习模型的设计和优化，提升行业整体性能，影响广泛的应用领域。",
-    "impact_level": 3,
+    "impact": "UNSL的提出可能会推动深度学习模型的设计和优化，影响多个领域的研究和应用。",
+    "impact_level": 4,
     "sentiment": 1,
     "topic_tags": [
       "大模型"
@@ -157,8 +157,8 @@
       "Alex Rives",
       "ESM Atlas"
     ],
-    "impact": "ESMFold2的推出将显著提升蛋白质结构预测的准确性和速度，推动生命科学研究和新药开发的进步。",
-    "impact_level": 3,
+    "impact": "ESMFold2的发布将显著推动生命科学领域的研究进展，尤其是在新药开发和基因编辑技术方面，可能带来行业的重大变革。",
+    "impact_level": 4,
     "sentiment": 1,
     "topic_tags": [
       "医疗AI"
@@ -175,11 +175,10 @@
       "阿里云",
       "点金",
       "金融行业",
-      "AI",
-      "金融通用智能体"
+      "AI"
     ],
-    "impact": "阿里云推出的金融通用智能体将推动金融行业AI的全面应用，提高业务效率和合规性，促进行业标准化建设。",
-    "impact_level": 3,
+    "impact": "阿里云推出的“点金”金融通用智能体将推动金融行业AI的全面应用，提高业务效率和合规性，促进行业标准化建设，标志着金融与AI深度融合的新时代。",
+    "impact_level": 4,
     "sentiment": 1,
     "topic_tags": [
       "金融AI"
@@ -196,13 +195,14 @@
       "黄仁勋",
       "清华大学",
       "英伟达",
-      "经济管理学院"
+      "经济管理学院",
+      "顾问委员会"
     ],
-    "impact": "黄仁勋的加入将增强英伟达与中国学术界及商业界的联系，有助于其在人才和合作方面的优势，同时为公司在中国市场的拓展提供支持。",
-    "impact_level": 2,
+    "impact": "黄仁勋的加入将促进英伟达与中国学术界和商业界的联系，可能增强其在中国市场的竞争力和合作机会。",
+    "impact_level": 3,
     "sentiment": 1,
     "topic_tags": [
-      "合规/政策"
+      "教育AI"
     ]
   },
   {
@@ -218,8 +218,8 @@
       "Claude",
       "Claude Code"
     ],
-    "impact": "Anthropic的融资将显著增强其在AI领域的竞争力，推动技术研发和市场扩展，可能引发行业内其他企业的跟进投资和技术创新。",
-    "impact_level": 3,
+    "impact": "Anthropic的融资将显著增强其在AI领域的竞争力，推动技术安全性和可解释性研究，同时满足市场对其产品的需求，可能影响整个行业的投资和发展方向。",
+    "impact_level": 4,
     "sentiment": 1,
     "topic_tags": [
       "安全/对齐"
@@ -235,10 +235,11 @@
     "key_entities": [
       "Glean",
       "阿尔文·贾因",
-      "上下文图"
+      "上下文图",
+      "人工智能"
     ],
-    "impact": "Glean的快速增长和其在AI预算压力下的市场定位，可能促使更多企业关注成本效益的AI解决方案，从而影响整个行业的竞争格局。",
-    "impact_level": 3,
+    "impact": "Glean的收入增长和其在AI预算削减中的优势，可能会促使更多企业关注成本效益的AI解决方案，从而影响整个企业AI市场的竞争格局。",
+    "impact_level": 4,
     "sentiment": 1,
     "topic_tags": [
       "办公/生产力"
@@ -255,8 +256,8 @@
       "Asana",
       "StackAI"
     ],
-    "impact": "Asana收购StackAI将推动其在AI领域的布局，提升工作效率，对行业内的竞争格局产生积极影响。",
-    "impact_level": 2,
+    "impact": "Asana收购StackAI将增强其在AI领域的竞争力，推动工作流自动化的进步，可能对行业内其他企业产生示范效应。",
+    "impact_level": 4,
     "sentiment": 1,
     "topic_tags": [
       "办公/生产力"
@@ -274,8 +275,8 @@
       "Opus",
       "OpenAI"
     ],
-    "impact": "Anthropic的Opus 4.8版本提升了模型的可靠性和用户体验，可能会吸引更多用户并增强其市场竞争力。",
-    "impact_level": 2,
+    "impact": "Anthropic的Opus 4.8版本发布标志着其在AI模型领域的快速进步，可能会提升用户体验并增强其市场竞争力，对行业产生明显影响。",
+    "impact_level": 3,
     "sentiment": 1,
     "topic_tags": [
       "大模型"
@@ -295,8 +296,8 @@
       "初创公司",
       "研究者"
     ],
-    "impact": "递归自我改进（RSI）概念的提出可能会加速AI技术的发展，改变行业格局，并对用户的使用体验产生深远影响。",
-    "impact_level": 3,
+    "impact": "递归自我改进（RSI）的概念可能会重新定义AI系统的进化方式，影响行业对AI角色的理解和应用。",
+    "impact_level": 4,
     "sentiment": 0,
     "topic_tags": [
       "大模型"

@@ -162,8 +162,13 @@ def compute_impact_lm(title: str, summary: str, client) -> Dict[str, Any]:
             "role": "user",
             "content": (
                 "基于标题和摘要，用1-2句中文概述该事件对行业/企业/用户的影响，"
-                "并给出从1到3的影响强度。影响强度为1代表对市场有局部影响，影响强度为3代表对市场有强烈影响。\n"
-                "仅返回JSON：{\\n  \\\"impact\\\": string,\\n  \\\"impact_level\\\": 1|2|3\\n}\\n\\n"
+                "并给出从1到5的影响强度："
+                "1=边缘信息，对市场几乎无影响（如活动预告、人事变动）；"
+                "2=细分领域局部影响（如小功能更新、小型融资）；"
+                "3=单一领域明显影响（如新模型发布、重要数据集、中型融资）；"
+                "4=多领域或行业级影响（如主流平台重大升级、大型收购、重要监管政策）；"
+                "5=对整个AI行业有颠覆性影响（如突破性架构、GPT级发布、重大法规出台）。\n"
+                "仅返回JSON：{\"impact\": string, \"impact_level\": 1|2|3|4|5}\n\n"
                 f"标题：{title}\n"
                 f"摘要：{summary}"
             ),
@@ -188,8 +193,8 @@ def compute_impact_lm(title: str, summary: str, client) -> Dict[str, Any]:
         level = 2
     if level < 1:
         level = 1
-    if level > 3:
-        level = 3
+    if level > 5:
+        level = 5
 
     return {"impact": impact_txt, "impact_level": level}
 

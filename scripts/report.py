@@ -6,13 +6,7 @@ from collections import Counter, defaultdict
 from util import load_json, parse_yyyy_mm_dd, sentiment_label, get_openai_client
 
 def impact_to_weight(level: Optional[int]) -> float:
-    if level == 3:
-        return 1.0
-    if level == 2:
-        return 0.6
-    if level == 1:
-        return 0.2
-    return 0.4
+    return level * 0.2
 
 
 def load_structured(path: Path = Path("data/structured_data.json")) -> List[Dict[str, Any]]:
@@ -67,7 +61,7 @@ def impact_badge(level: Optional[int]) -> str:
         lvl = int(level)
     except Exception:
         lvl = 2
-    lvl = max(1, min(3, lvl))
+    lvl = max(1, min(5, lvl))
     return "★" * lvl
 
 
