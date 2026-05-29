@@ -252,7 +252,39 @@ def render_trend_judgement_section(text: str) -> str:
     return "\n".join(lines)
 
 
-def render_report(records: List[Dict[str, Any]], top: List[Dict[str, Any]], trends: Dict[str, Any], trend_text: str) -> str:
+def generate_risk_opportunity_lm(trend_text: str, client) -> str:
+    """基于趋势判断生成风险或机会提示，输出两句话。"""
+    messages = [
+        {
+            "role": "system",
+            "content": (
+                "你是科技行业风险与机会分析师。"
+                "根据提供的趋势判断，分别给出一句风险提示和一句机会提示。"
+                "格式严格为两行，第一行以'【风险】'开头，第二行以'【机会】'开头，每行只有一句话，不超过40字。"
+            ),
+        },
+        {
+            "role": "user",
+            "content": f"以下是今日趋势判断，请基于此给出风险与机会提示：\n\n{trend_text}",
+        },
+    ]
+    try:
+        resp = client.chat.completions.create(
+            model="gpt-4o-mini",
+            temperature=0.3,
+            messages=messages,
+        )
+        return (resp.choices[0].message.content or "").strip()
+    except Exception:
+        return "【风险】暂无风险提示。\n【机会】暂无机会提示。"
+
+
+def render_risk_opportunity_section(text: str) -> str:
+    lines = ["## 风险或机会提示", "", text, ""]
+    return "\n".join(lines)
+
+
+def render_report(records: List[Dict[str, Any]], top: List[Dict[str, Any]], trends: Dict[str, Any], trend_text: str, risk_opportunity_text: str) -> str:
     report_date = pick_report_date(records)
     lines: List[str] = []
     lines.append(f"# AI 舆情分析日报（{report_date}）")
@@ -264,6 +296,8 @@ def render_report(records: List[Dict[str, Any]], top: List[Dict[str, Any]], tren
     lines.append(render_trend_judgement_section(trend_text))
     lines.append("")
     lines.append(render_trends_section(trends))
+    lines.append("")
+    lines.append(render_risk_opportunity_section(risk_opportunity_text))
     return "\n".join(lines)
 
 
@@ -272,8 +306,10 @@ def run():
     items = load_structured(structured_path)
     top = select_top_events(items, k=5)
     trends = build_trends(items)
-    trend_text = generate_trend_insight_lm(top, get_openai_client())
-    md = render_report(items, top, trends, trend_text)
+    client = get_openai_client()
+    trend_text = generate_trend_insight_lm(top, client)
+    risk_opportunity_text = generate_risk_opportunity_lm(trend_text, client)
+    md = render_report(items, top, trends, trend_text, risk_opportunity_text)
     d = pick_report_date(items)
     out_path = write_report(md, Path("output"), d)
     print(f"Report written to: {out_path}")
