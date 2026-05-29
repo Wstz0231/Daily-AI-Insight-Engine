@@ -132,14 +132,14 @@ def clean_title(item: dict, client) -> Optional[str]:
     if title:
         if not has_cjk(title):
             title = openai_translate_to_cn(title, client)
-        title = clean_text(title)[:20]
+        title = clean_text(title)
         return title if title else None
     # No title; try to generate from available text
     base = clean_text(item.get("content", "") or item.get("summary", ""))
     if not base:
         return None
     gen = openai_generate_title_cn(base, client)
-    gen = clean_text(gen)[:20]
+    gen = clean_text(gen)
     return gen if gen else None
 
 
